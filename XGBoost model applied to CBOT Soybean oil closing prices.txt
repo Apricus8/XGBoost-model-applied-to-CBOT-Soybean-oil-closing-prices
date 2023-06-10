@@ -1,0 +1,48 @@
+
+import pandas as pd
+import numpy as np
+import xgboost as xgb
+import joblib
+import matplotlib.pyplot as plt
+import tensorflow as tf
+from tensorflow import keras
+from sklearn.model_selection import train_test_split
+
+# Retrieve CBOT soybean oil historical data for 2014-2016
+data = pd.read_csv('https://www.quandl.com/api/v3/datasets/CHRIS/CME_BO1.csv?start_date=2014-01-01&end_date=2016-12-31')
+data['Date'] = pd.to_datetime(data['Date'])
+data.set_index('Date', inplace=True)
+close_prices = data['Settle']
+
+# Prepare data
+n_steps = 5
+features = []
+labels = []
+for i in range(len(close_prices) - n_steps):
+    features.append(close_prices.iloc[i:i + n_steps].values)
+    labels.append(close_prices.iloc[i + n_steps])
+
+features = np.array(features)
+labels = np.array(labels)
+
+X = (features - features.mean()) / features.std()
+y = (labels - labels.mean()) / labels.std()
+
+# Train-test split
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Train XGBoost model with TensorFlow
+model = xgb.XGBRegressor(objective='reg:squarederror', random_state=42)
+model.fit(X_train, y_train)
+
+# Test the model
+y_pred = model.predict(X_test)
+
+# Store the model
+model_filename = 'xgboost_model.joblib'
+joblib.dump(model, model_filename)
+
+# Visualize the performance
+df = pd.DataFrame({'Real': y_test.flatten(), 'Predicted': y_pred.flatten()})
+df.plot(title='Model Performance: Predicted vs Actual Closing Price', figsize=(15, 10))
+plt.show()
