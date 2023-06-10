@@ -3,9 +3,6 @@ CBOT Soybean oil closing price prediction using an XGBoost ML model applied to t
 This the El Niño weather period. This model aims specifically at the soybean oil price performance &amp; its forecasting vs the exchange listed contracts used hedging risk strategies &amp; speculative bets traded at CBOT. 
 
 This period is relevant as the El Niño weather event had a global reach with below or above-average rainfall & flooding impacting agricultural commodities as oilseeds, soft, grains, live stock & dairy products.
-
-This model aims specifically at the soybean oil price performance & its forecasting vs the exchange listed contracts used hedging risk strategies & speculative bets traded at the Chicago Board of Trade (CBOT).
-This to manage supply chain coverage & manage price risk vs the consumer inflationary impact. 
  
 The model is interesting & a basic reference given the current El Nino weather impact is rising to a moderate level by Q4 2023/ Q1 2024.
 Hence a weather market risk & hedging considerations applied.
