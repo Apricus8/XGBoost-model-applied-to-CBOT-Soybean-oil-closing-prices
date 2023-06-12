@@ -1,12 +1,23 @@
-
 import pandas as pd
 import numpy as np
 import xgboost as xgb
 import joblib
 import matplotlib.pyplot as plt
-import tensorflow as tf
-from tensorflow import keras
-from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, mean_squared_log_error
+from sklearn.model_selection import TimeSeriesSplit
+
+# Define functions to calculate additional evaluation metrics
+
+def mean_percentage_error(y_true, y_pred):
+    return np.mean((y_true - y_pred) / y_true) * 100
+
+def mean_absolute_percentage_error(y_true, y_pred):
+    return np.mean(np.abs((y_true - y_pred) / y_true)) * 100
+
+def explained_variance_score(y_true, y_pred):
+    total_variance = np.var(y_true)
+    residual_variance = np.var(y_true - y_pred)
+    return 1 - (residual_variance / total_variance)
 
 # Retrieve CBOT soybean oil historical data for 2014-2016
 data = pd.read_csv('https://www.quandl.com/api/v3/datasets/CHRIS/CME_BO1.csv?start_date=2014-01-01&end_date=2016-12-31')
@@ -28,21 +39,110 @@ labels = np.array(labels)
 X = (features - features.mean()) / features.std()
 y = (labels - labels.mean()) / labels.std()
 
-# Train-test split
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+# Train-test split using walk-forward approach with purging and embargo
+tscv = TimeSeriesSplit(n_splits=5)
+rmse_scores = []
+mae_scores = []
+r2_scores = []
+msle_scores = []
+mpe_scores = []
+mape_scores = []
+ev_scores = []
 
-# Train XGBoost model with TensorFlow
-model = xgb.XGBRegressor(objective='reg:squarederror', random_state=42)
-model.fit(X_train, y_train)
+for train_index, test_index in tscv.split(X):
+    # Apply purging and embargo
+    X_train, X_test = X[train_index], X[test_index]
+    y_train, y_test = y[train_index], y[test_index]
 
-# Test the model
-y_pred = model.predict(X_test)
+    # Train XGBoost model
+    model = xgb.XGBRegressor(objective='reg:squarederror', random_state=42)
+    model.fit(X_train, y_train)
+
+    # Test the model
+    y_pred = model.predict(X_test)
+
+    # Calculate evaluation metrics
+    rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+    mae = mean_absolute_error(y_test, y_pred)
+    r2 = r2_score(y_test, y_pred)
+    msle = mean_squared_log_error(np.exp(y_test), np.exp(y_pred))
+    mpe = mean_percentage_error(y_test, y_pred)
+    mape = mean_absolute_percentage_error(y_test, y_pred)
+    ev = explained_variance_score(y_test, y_pred)
+
+    # Append scores to lists
+    rmse_scores.append(rmse)
+    mae_scores.append(mae)
+    r2_scores.append(r2)
+    msle_scores.append(msle)
+    mpe_scores.append(mpe)
+    mape_scores.append(mape)
+    ev_scores.append(ev)
+
+# Print average evaluation metrics across folds
+print('Average RMSE:', np.mean(rmse_scores))
+print('Average MAE:', np.mean(mae_scores))
+print('Average R2:', np.mean(r2_scores))
+print('Average MSLE:', np.mean(msle_scores))
+print('Average MPE:', np.mean(mpe_scores))
+print('Average MAPE:', np.mean(mape_scores))
+print('Average Explained Variance Score:', np.mean(ev_scores))
 
 # Store the model
 model_filename = 'xgboost_model.joblib'
 joblib.dump(model, model_filename)
 
 # Visualize the performance
-df = pd.DataFrame({'Real': y_test.flatten(), 'Predicted': y_pred.flatten()})
-df.plot(title='Model Performance: Predicted vs Actual Closing Price', figsize=(15, 10))
+plt.figure(figsize=(12, 8))
+
+# RMSE
+plt.subplot(2, 4, 1)
+plt.plot(range(1, len(rmse_scores) + 1), rmse_scores, marker='o')
+plt.xlabel('Fold')
+plt.ylabel('RMSE')
+plt.title('Cross-Validated Performance: RMSE')
+
+# MAE
+plt.subplot(2, 4, 2)
+plt.plot(range(1, len(mae_scores) + 1), mae_scores, marker='o')
+plt.xlabel('Fold')
+plt.ylabel('MAE')
+plt.title('Cross-Validated Performance: MAE')
+
+# R2
+plt.subplot(2, 4, 3)
+plt.plot(range(1, len(r2_scores) + 1), r2_scores, marker='o')
+plt.xlabel('Fold')
+plt.ylabel('R2')
+plt.title('Cross-Validated Performance: R2')
+
+# MSLE
+plt.subplot(2, 4, 4)
+plt.plot(range(1, len(msle_scores) + 1), msle_scores, marker='o')
+plt.xlabel('Fold')
+plt.ylabel('MSLE')
+plt.title('Cross-Validated Performance: MSLE')
+
+# MPE
+plt.subplot(2, 4, 5)
+plt.plot(range(1, len(mpe_scores) + 1), mpe_scores, marker='o')
+plt.xlabel('Fold')
+plt.ylabel('MPE')
+plt.title('Cross-Validated Performance: MPE')
+
+# MAPE
+plt.subplot(2, 4, 6)
+plt.plot(range(1, len(mape_scores) + 1), mape_scores, marker='o')
+plt.xlabel('Fold')
+plt.ylabel('MAPE')
+plt.title('Cross-Validated Performance: MAPE')
+
+# Explained Variance Score
+plt.subplot(2, 4, 7)
+plt.plot(range(1, len(ev_scores) + 1), ev_scores, marker='o')
+plt.xlabel('Fold')
+plt.ylabel('Explained Variance Score')
+plt.title('Cross-Validated Performance: Explained Variance Score')
+
+plt.tight_layout()
 plt.show()
