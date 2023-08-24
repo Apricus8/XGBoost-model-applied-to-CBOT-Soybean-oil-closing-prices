@@ -23,7 +23,7 @@ Next, we train an XGBoost model using TensorFlow's xgb.XGBRegressor class. The m
 
 The trained model is saved using the joblib.dump function with the specified filename. Finally, the performance of the model is visualized using a line plot, showing the predicted and actual closing prices.
 
-*****************************************************************************************************************************************
+************************************************************************************************************************
 
 ** 12/06/2023 Updates
 The updated code incorporates the walk-forward cross-validation with purging and embargo for training the XGBoost model.
@@ -43,7 +43,10 @@ The performance is visualized using a line plot, showing the RMSE values for eac
 This approach ensures that the model is trained and tested in a walk-forward manner, with purging and embargo applied to prevent data leakage.
 
 The updated code incorporates as well additional evaluation metrics: Mean Absolute Error (MAE), R-squared (R2), Mean Squared Logarithmic Error (MSLE), Mean Percentage Error (MPE), Mean Absolute Percentage Error (MAPE), and Explained Variance Score. The performance of the XGBoost model is visualized using these metrics across different folds of the time series cross-validation.
-***************************************************************************************************************************************
+************************************************************************************************************************
 
+** 12/06/2023 Updates
+
+Added improvements of the R2 coefficient of determination modelling process by enhancing feature engineering & hyperparameter tuning.
 
 Way to go but an interesting start & a great experience for me.
