@@ -1,0 +1,150 @@
+import pandas as pd
+import numpy as np
+import xgboost as xgb
+import joblib
+import matplotlib.pyplot as plt
+from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score, mean_squared_log_error
+from sklearn.model_selection import TimeSeriesSplit
+
+# Define functions to calculate additional evaluation metrics
+def mean_percentage_error(y_true, y_pred):
+    return np.mean((y_true - y_pred) / y_true) * 100
+
+def mean_absolute_percentage_error(y_true, y_pred):
+    return np.mean(np.abs((y_true - y_pred) / y_true)) * 100
+
+def explained_variance_score(y_true, y_pred):
+    total_variance = np.var(y_true)
+    residual_variance = np.var(y_true - y_pred)
+    return 1 - (residual_variance / total_variance)
+
+# Retrieve CBOT soybean oil historical data for 2014-2016
+data = pd.read_csv('https://www.quandl.com/api/v3/datasets/CHRIS/CME_BO1.csv?start_date=2014-01-01&end_date=2016-12-31')
+data['Date'] = pd.to_datetime(data['Date'])
+data.set_index('Date', inplace=True)
+close_prices = data['Settle']
+
+# Create additional features: rolling mean
+close_prices_rolling_mean = close_prices.rolling(window=3).mean().dropna()
+
+# Prepare data
+features = []
+labels = []
+n_steps = 5
+
+for i in range(len(close_prices_rolling_mean) - n_steps):
+    feature_vector = np.concatenate([
+        close_prices.iloc[i:i + n_steps].values,
+        close_prices_rolling_mean.iloc[i:i + n_steps].values
+    ])
+    features.append(feature_vector)
+    labels.append(close_prices.iloc[i + n_steps])
+
+features = np.array(features)
+labels = np.array(labels)
+
+# Standardize the data
+X = (features - features.mean()) / features.std()
+y = (labels - labels.mean()) / labels.std()
+
+# Time Series Cross-Validation
+tscv = TimeSeriesSplit(n_splits=5)
+
+# Hyperparameter tuning using GridSearchCV
+param_grid = {
+    'learning_rate': [0.01, 0.05, 0.1],
+    'max_depth': [3, 5, 7],
+    'n_estimators': [50, 100, 200]
+}
+
+model = xgb.XGBRegressor(objective='reg:squarederror', random_state=42)
+grid_search = GridSearchCV(model, param_grid, cv=tscv, scoring='r2')
+grid_search.fit(X, y)
+best_model = grid_search.best_estimator_
+
+# Evaluate the best model using the existing time-series cross-validation setup
+rmse_scores, mae_scores, r2_scores, msle_scores, mpe_scores, mape_scores, ev_scores = [], [], [], [], [], [], []
+
+for train_index, test_index in tscv.split(X):
+    X_train, X_test = X[train_index], X[test_index]
+    y_train, y_test = y[train_index], y[test_index]
+
+    best_model.fit(X_train, y_train)
+    y_pred = best_model.predict(X_test)
+
+    rmse_scores.append(np.sqrt(mean_squared_error(y_test, y_pred)))
+    mae_scores.append(mean_absolute_error(y_test, y_pred))
+    r2_scores.append(r2_score(y_test, y_pred))
+    msle_scores.append(mean_squared_log_error(np.exp(y_test), np.exp(y_pred)))
+    mpe_scores.append(mean_percentage_error(y_test, y_pred))
+    mape_scores.append(mean_absolute_percentage_error(y_test, y_pred))
+    ev_scores.append(explained_variance_score(y_test, y_pred))
+
+# Print average evaluation metrics across folds
+print('Average RMSE:', np.mean(rmse_scores))
+print('Average MAE:', np.mean(mae_scores))
+print('Average R2:', np.mean(r2_scores))
+print('Average MSLE:', np.mean(msle_scores))
+print('Average MPE:', np.mean(mpe_scores))
+print('Average MAPE:', np.mean(mape_scores))
+print('Average Explained Variance Score:', np.mean(ev_scores))
+
+# Store the best model
+model_filename = 'xgboost_best_model.joblib'
+joblib.dump(best_model, model_filename)
+
+# Visualize the performance
+plt.figure(figsize=(12, 8))
+
+# RMSE
+plt.subplot(2, 4, 1)
+plt.plot(range(1, len(rmse_scores) + 1), rmse_scores, marker='o')
+plt.xlabel('Fold')
+plt.ylabel('RMSE')
+plt.title('Cross-Validated Performance: RMSE')
+
+# MAE
+plt.subplot(2, 4, 2)
+plt.plot(range(1, len(mae_scores) + 1), mae_scores, marker='o')
+plt.xlabel('Fold')
+plt.ylabel('MAE')
+plt.title('Cross-Validated Performance: MAE')
+
+# R2
+plt.subplot(2, 4, 3)
+plt.plot(range(1, len(r2_scores) + 1), r2_scores, marker='o')
+plt.xlabel('Fold')
+plt.ylabel('R2')
+plt.title('Cross-Validated Performance: R2')
+
+# MSLE
+plt.subplot(2, 4, 4)
+plt.plot(range(1, len(msle_scores) + 1), msle_scores, marker='o')
+plt.xlabel('Fold')
+plt.ylabel('MSLE')
+plt.title('Cross-Validated Performance: MSLE')
+
+# MPE
+plt.subplot(2, 4, 5)
+plt.plot(range(1, len(mpe_scores) + 1), mpe_scores, marker='o')
+plt.xlabel('Fold')
+plt.ylabel('MPE')
+plt.title('Cross-Validated Performance: MPE')
+
+# MAPE
+plt.subplot(2, 4, 6)
+plt.plot(range(1, len(mape_scores) + 1), mape_scores, marker='o')
+plt.xlabel('Fold')
+plt.ylabel('MAPE')
+plt.title('Cross-Validated Performance: MAPE')
+
+# Explained Variance Score
+plt.subplot(2, 4, 7)
+plt.plot(range(1, len(ev_scores) + 1), ev_scores, marker='o')
+plt.xlabel('Fold')
+plt.ylabel('Explained Variance Score')
+plt.title('Cross-Validated Performance: Explained Variance Score')
+
+plt.tight_layout()
+plt.show()
